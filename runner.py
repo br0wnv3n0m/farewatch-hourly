@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -12,12 +13,21 @@ from scraper import GoogleFlights, ScraperError
 
 
 def api(base, token, path, payload):
-    request = urllib.request.Request(base + '/api/runner/' + path, data=json.dumps(payload).encode(), headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'}, method='POST')
+    request = urllib.request.Request(base + '/api/runner/' + path, data=json.dumps(payload).encode(), headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'FarewatchRunner/1.0'}, method='POST')
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             return json.load(response)
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f'Dashboard API returned HTTP {exc.code}. Check the runner secret and dashboard setup.') from None
+        raw = exc.read(20000).decode('utf-8', errors='replace')
+        if 'application/json' in exc.headers.get('Content-Type', ''):
+            try:
+                reason = json.loads(raw).get('error', 'Request rejected.')
+            except ValueError:
+                reason = 'Invalid API response.'
+        else:
+            match = re.search(r'error\s*(?:code\s*[:=]?\s*)?(1\d{3})', raw, re.I)
+            reason = 'Request rejected before reaching the dashboard API.' + (' Cloudflare error ' + match[1] + '.' if match else '')
+        raise RuntimeError(f'Dashboard API returned HTTP {exc.code}. {reason}') from None
     except (urllib.error.URLError, ValueError, TimeoutError):
         raise RuntimeError('Could not reach the dashboard API.') from None
 
