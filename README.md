@@ -52,3 +52,7 @@ References:
 - https://github.com/boryzo/google-flights-parser
 - https://docs.github.com/en/billing/concepts/product-billing/github-actions
 - https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
+
+## Multiple watches
+
+Each hourly run visits up to 10 enabled scraper watches once. Each watch has its own date cursor and batch size. Paused, expired and SerpApi watches are skipped. Failed searches do not prevent attempts for other watches. A 45-minute job timeout applies; the next run starts with the least recently checked watch. Watch names and recipient emails are omitted from runner job settings.

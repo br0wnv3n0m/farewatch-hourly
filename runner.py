@@ -46,10 +46,22 @@ def execute():
         url = urllib.parse.urlparse(base)
         if url.scheme != 'https' or not url.netloc or url.username or url.password or url.path or url.query or url.fragment or len(token) < 32:
             raise RuntimeError('Set FAREWATCH_URL to your HTTPS dashboard origin and FAREWATCH_RUNNER_TOKEN to its runner secret (32+ characters).')
-        job = api(base, token, 'job', {})
-        if job.get('skip'):
-            print(job['skip'])
-            return 0
+        excluded, failed = [], False
+        for _ in range(10):
+            job = api(base, token, 'job', {'exclude': excluded})
+            if job.get('skip'):
+                print(job['skip'])
+                break
+            failed = process_job(job, base, token, args) != 0 or failed
+            # Older single-watch servers omit watchId; remain compatible while deploying.
+            if not job.get('watchId'):
+                break
+            excluded.append(job['watchId'])
+        return 1 if failed else 0
+    return process_job(job, base, token, args)
+
+
+def process_job(job, base, token, args):
     checked, offers, errors = [], [], 0
     client = GoogleFlights()
     for pair in job['pairs']:
