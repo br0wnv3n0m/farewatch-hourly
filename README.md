@@ -17,7 +17,7 @@ The current helper uses the existing Farewatch deployment address; if reusing th
 - For round trips it selects one eligible outbound and then checks its actual return options. The return result carries the full party's round-trip price. It never adds two independent one-way fares and calls them a through round trip.
 - Stops, routes, dates and layovers are checked for both directions again on the server. Missing or inconsistent data fails the search rather than producing a false cheap fare. Checked bags remain unverified.
 - Only under-budget results are saved by the dashboard. Resend sends a digest for eligible new or sufficiently cheaper fares, using the existing baggage consent and duplicate-alert rules.
-- At most 50 offers are reported per run. Google requests are spaced by at least two seconds, use finite timeouts and stop on an error, consent/block page, or an inconsistent response. No CAPTCHA solving, proxy rotation or paid integrations are included.
+- At most 50 offers are reported per run. Google requests are spaced by at least two seconds and use finite timeouts. An explicit Google flight-data service error is retried once after five seconds; a persistent error still fails the search. HTTP errors, consent/block pages and inconsistent itinerary data stop without retries. No CAPTCHA solving, proxy rotation or paid integrations are included.
 - No SerpApi requests are made in scraper mode. Switching back to SerpApi in the dashboard restores its original daily schedule and free credit caps.
 
 ## GitHub settings

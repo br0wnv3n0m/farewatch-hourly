@@ -1,9 +1,10 @@
 import base64
 import json
 import unittest
+from unittest.mock import patch
 
 from fast_flights.pb.flights_pb2 import ItinerarySummary
-from scraper import ScraperError, acceptable, make_query, parse_options, select_outbound, GoogleFlights
+from scraper import FlightDataUnavailable, ScraperError, acceptable, make_query, parse_options, select_outbound, GoogleFlights
 
 
 CONFIG = {'origin': 'AAA', 'destination': 'BBB', 'maxStops': 1, 'maxLayover': 480, 'adults': 2, 'children': 0, 'cabin': 1, 'currency': 'CAD'}
@@ -32,6 +33,39 @@ def fixture(reverse=False, price=2500, currency='CAD', unpriced=False):
 
 
 class AdapterTests(unittest.TestCase):
+    def test_callback_metadata_is_separate_from_json(self):
+        html = fixture().replace('sideChannel:{}', 'extraMetadata: true,sideChannel:{"a":1,"b":2}')
+        self.assertEqual(parse_options(html, 'CAD')[0]['price'], 2500)
+
+    def test_provider_error_is_never_an_empty_success(self):
+        html = "<script class='ds:1'>AF_initDataCallback({key:'ds:1',data:[],errorHasStatus: true,sideChannel:{}});</script>"
+        with self.assertRaises(FlightDataUnavailable):
+            parse_options(html, 'CAD')
+
+    def test_provider_error_retries_once_and_can_recover(self):
+        client = GoogleFlights()
+        error = "<script class='ds:1'>data:[],errorHasStatus: true,sideChannel:{}</script>"
+        with patch.object(client, 'fetch', side_effect=[error, fixture()]) as fetch, patch('scraper.time.sleep') as sleep:
+            self.assertEqual(client.options(None, 'CAD')[0]['price'], 2500)
+            self.assertEqual(fetch.call_count, 2)
+            sleep.assert_called_once_with(5)
+
+    def test_persistent_provider_error_stays_failed_after_one_retry(self):
+        client = GoogleFlights()
+        error = "<script class='ds:1'>data:[],errorHasStatus: true,sideChannel:{}</script>"
+        with patch.object(client, 'fetch', return_value=error) as fetch, patch('scraper.time.sleep'):
+            with self.assertRaises(FlightDataUnavailable):
+                client.options(None, 'CAD')
+            self.assertEqual(fetch.call_count, 2)
+
+    def test_malformed_or_blocked_page_is_not_retried(self):
+        client = GoogleFlights()
+        with patch.object(client, 'fetch', return_value='<html>Consent</html>') as fetch, patch('scraper.time.sleep') as sleep:
+            with self.assertRaises(ScraperError):
+                client.options(None, 'CAD')
+            self.assertEqual(fetch.call_count, 1)
+            sleep.assert_not_called()
+
     def test_prices_and_currency(self):
         results = parse_options(fixture(price=2345), 'CAD')
         self.assertEqual(results[0]['price'], 2345)

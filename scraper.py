@@ -9,6 +9,7 @@ import base64
 import copy
 import json
 import math
+import re
 import time
 from datetime import datetime
 
@@ -20,6 +21,10 @@ from selectolax.lexbor import LexborHTMLParser
 
 class ScraperError(Exception):
     pass
+
+
+class FlightDataUnavailable(ScraperError):
+    """Google returned an explicit flight-data service error."""
 
 
 def _field(number, value):
@@ -48,7 +53,12 @@ def _payload(html):
     if not script:
         raise ScraperError('Google did not return flight data (possibly a consent or blocked page).')
     try:
-        payload = json.loads(script.text().split('data:', 1)[1].rsplit(',', 1)[0])
+        # Decode the JSON value only. Callback properties (including Google's
+        # errorHasStatus flag) are JavaScript, not part of the JSON payload.
+        data = script.text().split('data:', 1)[1].lstrip()
+        payload, end = json.JSONDecoder().raw_decode(data)
+        if re.search(r'\berrorHasStatus\s*:\s*true\b', data[end:]):
+            raise FlightDataUnavailable('Google returned a flight-data service error; no fares were accepted.')
         if not isinstance(payload, list) or len(payload) < 8:
             size = len(payload) if isinstance(payload, list) else 'non-list'
             raise ScraperError(f'Google returned incomplete flight data (fields: {size}).')
@@ -188,7 +198,7 @@ class GoogleFlights:
 
     def search(self, config, pair):
         query = make_query(config, pair)
-        options = parse_options(self.fetch(query), config['currency'])
+        options = self.options(query, config['currency'])
         outbound = [o for o in options if acceptable(o, config, config['origin'], config['destination'], pair['out'])]
         if not pair.get('back'):
             return [{'pair': pair, 'out': o, 'back': None} for o in outbound[:5]]
@@ -196,8 +206,18 @@ class GoogleFlights:
         if not outbound:
             return []
         selected = outbound[0]
-        return_options = parse_options(self.fetch(select_outbound(query, selected)), config['currency'])
+        return_options = self.options(select_outbound(query, selected), config['currency'])
         eligible = [o for o in return_options if acceptable(o, config, config['destination'], config['origin'], pair['back'])]
         if return_options and not any(o['flights'][0]['departure_airport']['id'] == config['destination'] for o in return_options):
             raise ScraperError('Google did not select the outbound flight; refusing to treat it as a verified round trip.')
         return [{'pair': pair, 'out': selected, 'back': o} for o in eligible[:5]]
+
+    def options(self, query, currency):
+        for attempt in range(2):
+            try:
+                return parse_options(self.fetch(query), currency)
+            except FlightDataUnavailable:
+                if attempt:
+                    raise
+                print('Google returned a flight-data service error; retrying once after 5 seconds.', flush=True)
+                time.sleep(5)
