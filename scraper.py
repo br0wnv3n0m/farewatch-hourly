@@ -50,8 +50,11 @@ def _payload(html):
     try:
         payload = json.loads(script.text().split('data:', 1)[1].rsplit(',', 1)[0])
         if not isinstance(payload, list) or len(payload) < 8:
-            raise ValueError()
+            size = len(payload) if isinstance(payload, list) else 'non-list'
+            raise ScraperError(f'Google returned incomplete flight data (fields: {size}).')
         return payload
+    except json.JSONDecodeError as exc:
+        raise ScraperError(f'Google flight response JSON could not be read (offset {exc.pos}).') from exc
     except (ValueError, IndexError, AttributeError) as exc:
         raise ScraperError('Google flight response format changed.') from exc
 
