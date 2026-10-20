@@ -12,7 +12,7 @@ The current helper uses the existing Farewatch deployment address; if reusing th
 
 ## What it checks
 
-- The workflow is scheduled at minute **17 of every hour, UTC**. GitHub can delay or drop scheduled jobs, so this is not a guarantee of exact hourly execution.
+- The workflow attempts to run at minutes **7, 22, 37 and 52 of every hour, UTC**. A guard checks GitHub run history and skips the fare-check job if it succeeded within the last hour. Skipped attempts do not reset that timer; failed checks can retry on the next attempt. Manual runs bypass the guard. GitHub can delay or drop scheduled jobs, so this improves recovery but does not guarantee exact hourly execution.
 - Default: five date combinations per run; choose 1–10 in the dashboard. Twenty-five combinations take approximately five successful hourly runs at the default setting. It does not check all combinations every hour.
 - For round trips it selects one eligible outbound and then checks its actual return options. The return result carries the full party's round-trip price. It never adds two independent one-way fares and calls them a through round trip.
 - Stops, routes, dates and layovers are checked for both directions again on the server. Missing or inconsistent data fails the search rather than producing a false cheap fare. Checked bags remain unverified.

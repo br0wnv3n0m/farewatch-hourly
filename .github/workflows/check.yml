@@ -2,18 +2,33 @@ name: Hourly flight check
 
 on:
   schedule:
-    - cron: '17 * * * *'
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: farewatch-hourly
   cancel-in-progress: false
 
 jobs:
+  due:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      due: ${{ steps.gate.outputs.due }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check whether an hourly fare check is due
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 schedule_gate.py
   check:
+    needs: due
+    if: needs.due.outputs.due == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
