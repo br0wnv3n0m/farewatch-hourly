@@ -50,13 +50,21 @@ class AdapterTests(unittest.TestCase):
             self.assertEqual(fetch.call_count, 2)
             sleep.assert_called_once_with(5)
 
-    def test_persistent_provider_error_stays_failed_after_one_retry(self):
+    def test_provider_error_can_recover_on_last_bounded_retry(self):
+        client = GoogleFlights()
+        error = "<script class='ds:1'>data:[],errorHasStatus: true,sideChannel:{}</script>"
+        with patch.object(client, 'fetch', side_effect=[error, error, fixture()]) as fetch, patch('scraper.time.sleep') as sleep:
+            self.assertEqual(client.options(None, 'CAD')[0]['price'], 2500)
+            self.assertEqual(fetch.call_count, 3)
+            self.assertEqual([call.args[0] for call in sleep.call_args_list], [5, 15])
+
+    def test_persistent_provider_error_stays_failed_after_bounded_retries(self):
         client = GoogleFlights()
         error = "<script class='ds:1'>data:[],errorHasStatus: true,sideChannel:{}</script>"
         with patch.object(client, 'fetch', return_value=error) as fetch, patch('scraper.time.sleep'):
             with self.assertRaises(FlightDataUnavailable):
                 client.options(None, 'CAD')
-            self.assertEqual(fetch.call_count, 2)
+            self.assertEqual(fetch.call_count, 3)
 
     def test_malformed_or_blocked_page_is_not_retried(self):
         client = GoogleFlights()

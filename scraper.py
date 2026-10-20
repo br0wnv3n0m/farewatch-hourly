@@ -178,7 +178,7 @@ def select_outbound(query, outbound):
 
 
 class GoogleFlights:
-    def __init__(self, delay=2):
+    def __init__(self, delay=5):
         self.client = Client(impersonate='chrome_145', impersonate_os='macos', referer=True, cookie_store=True, timeout=35)
         self.delay = delay
         self.last_request = 0
@@ -213,11 +213,13 @@ class GoogleFlights:
         return [{'pair': pair, 'out': selected, 'back': o} for o in eligible[:5]]
 
     def options(self, query, currency):
-        for attempt in range(2):
+        waits = (5, 15)
+        for attempt in range(3):
             try:
                 return parse_options(self.fetch(query), currency)
             except FlightDataUnavailable:
-                if attempt:
+                if attempt == len(waits):
                     raise
-                print('Google returned a flight-data service error; retrying once after 5 seconds.', flush=True)
-                time.sleep(5)
+                wait = waits[attempt]
+                print(f'Google returned a flight-data service error; retry {attempt + 1}/2 after {wait} seconds.', flush=True)
+                time.sleep(wait)
